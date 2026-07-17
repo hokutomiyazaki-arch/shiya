@@ -1,0 +1,22 @@
+{
+  "name": "頭頂葉（空間認識）トレーナー",
+  "short_name": "頭頂葉",
+  "description": "正面の目印を見つめたまま、視界のはし（周辺視野）で数字を読む空間認識トレーニング。頭頂葉と背側視覚経路を神経科学から見るFunctional Neuro TrainingのLite PWA。",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1a20",
+  "theme_color": "#0b1a20",
+  "scope": "./",
+  "lang": "ja",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "FNT512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "FNT512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "FNT512.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "FNT512.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "FNT512.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "FNT512.png", "sizes": "96x96", "type": "image/png", "purpose": "any" }
+  ]
+}

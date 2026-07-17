@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1a20" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="頭頂葉" />
+<meta name="description" content="正面の目印を見つめたまま、視界のはし（周辺視野）で数字を読む空間認識トレーニング。頭頂葉と背側視覚経路を神経科学から見るFunctional Neuro TrainingのLite PWA。" />
+<title>頭頂葉（空間認識）トレーナー ─ 周辺視野で数字を読む / Functional Neuro Training</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="FNT512.png" />
+<link rel="icon" type="image/png" href="FNT512.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  /* ===== 配色：ユニバーサルデザイン（WCAG AA目安の高コントラスト・FNT共通） ===== */
+  :root{
+    --bg0:#0b1a20; --bg1:#123138; --bg2:#16414a;
+    --accent:#7fe0cd; --accent2:#3fa895; --accentInk:#06231d;
+    --ink:#f2faf7; --muted:#a8c6bf; --line:rgba(255,255,255,.12);
+    --card:rgba(255,255,255,.07); --danger:#ffb4a8;
+    --vh:1vh;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ overflow-x:hidden; max-width:100%; }
+  html{ height:100%; }
+  body{
+    font-family:"M PLUS Rounded 1c", system-ui, sans-serif; font-weight:700;
+    color:var(--ink); line-height:1.7;
+    background:radial-gradient(120% 90% at 50% 6%, var(--bg2) 0%, var(--bg1) 44%, var(--bg0) 100%);
+    background-attachment:fixed;
+    min-height:100vh; min-height:100dvh; min-height:calc(var(--vh) * 100);
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  /* プレイ中（ゲーム）だけスクロールロック */
+  body.playing{ overflow:hidden; touch-action:none; }
+  .scroll, .scroll *{ touch-action:auto !important; }
+  /* プレイ中は全画面に数字を出すのでヘッダー/フッターを隠す */
+  body.playing header, body.playing footer{ visibility:hidden; pointer-events:none; }
+
+  button{ font-family:inherit; font-weight:700; cursor:pointer; border:none; }
+  a{ color:var(--accent); }
+  :focus-visible{ outline:3px solid var(--accent); outline-offset:3px; border-radius:8px; }
+
+  /* ===== S0 スプラッシュ（起動時だけ） ===== */
+  #splash{
+    position:fixed; inset:0; z-index:1000; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:32px;
+    background:radial-gradient(120% 90% at 50% 20%, var(--bg2) 0%, var(--bg1) 45%, var(--bg0) 100%);
+    transition:opacity .45s ease, visibility .45s ease;
+  }
+  #splash.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+  #splash img{ width:132px; height:132px; margin-bottom:22px; border-radius:26px; }
+  #splash .fnt{ font-size:13px; letter-spacing:.24em; color:var(--muted); margin-bottom:14px; }
+  #splash h1{ font-size:27px; font-weight:800; color:var(--accent); margin-bottom:10px; }
+  #splash .lead{ font-size:14px; color:var(--muted); margin-bottom:30px; }
+  #splash .tapstart{
+    min-height:52px; padding:14px 34px; border-radius:16px; font-size:17px; font-weight:800;
+    color:var(--accentInk); background:linear-gradient(180deg,var(--accent),var(--accent2));
+    animation:breathe 2.4s ease-in-out infinite;
+  }
+  #splash .copy{ position:absolute; bottom:calc(20px + env(safe-area-inset-bottom)); font-size:11px; color:var(--muted); }
+  @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
+
+  /* ===== レイアウト ===== */
+  .app{ width:100%; max-width:480px; margin:0 auto; min-height:100vh; min-height:calc(var(--vh) * 100);
+    display:flex; flex-direction:column; }
+  header{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px 4px; }
+  .logo{ display:flex; align-items:center; gap:10px; }
+  .logo img{ width:34px; height:34px; }
+  .logo b{ font-size:15px; font-weight:800; letter-spacing:.02em; }
+  .menuBtn{ width:46px; height:46px; border-radius:12px; background:var(--card); color:var(--ink);
+    font-size:22px; display:flex; align-items:center; justify-content:center; }
+
+  main{ flex:1; display:flex; flex-direction:column; padding:8px 20px 4px; }
+
+  /* 画面（S1〜S4） */
+  .screen{ display:none; flex:1; flex-direction:column; }
+  .screen.active{ display:flex; }
+  .screen.scroll{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
+  .step-label{ font-size:12px; letter-spacing:.16em; color:var(--accent); margin-bottom:8px; }
+  h2{ font-size:23px; font-weight:800; line-height:1.5; margin-bottom:14px; }
+  .desc{ font-size:15px; color:var(--muted); line-height:1.9; }
+  .desc b{ color:var(--ink); }
+
+  /* 字幕（音声と二重化） */
+  .subtitle{ min-height:64px; margin:18px 0; padding:16px 18px; border-radius:16px;
+    background:var(--card); border:1px solid var(--line); font-size:16px; line-height:1.8; }
+  .subtitle .who{ font-size:11px; letter-spacing:.14em; color:var(--accent); display:block; margin-bottom:6px; }
+
+  /* やり方リスト */
+  .setupList{ list-style:none; margin:16px 0; display:flex; flex-direction:column; gap:12px; }
+  .setupList li{ display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:14px;
+    background:var(--card); border:1px solid var(--line); font-size:15px; line-height:1.7; }
+  .setupList .no{ flex:none; width:26px; height:26px; border-radius:50%; background:var(--accent);
+    color:var(--accentInk); font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; }
+
+  /* レベル選択 */
+  .levelList{ display:flex; flex-direction:column; gap:14px; margin-top:20px; }
+  .levelBtn{ width:100%; min-height:72px; padding:16px 18px; border-radius:18px; text-align:left;
+    color:var(--ink); background:var(--card); border:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+  .levelBtn:active{ transform:translateY(1px); }
+  .levelBtn .lv{ flex:none; width:40px; height:40px; border-radius:12px; background:var(--accent);
+    color:var(--accentInk); font-weight:800; font-size:18px; display:flex; align-items:center; justify-content:center; }
+  .levelBtn .txt b{ font-size:17px; font-weight:800; display:block; }
+  .levelBtn .txt small{ font-size:13px; color:var(--muted); font-weight:700; }
+
+  /* === ゲーム（全画面：中央に大きな数字） === */
+  #numRun{ position:relative; display:block; flex:1; min-height:0; }
+
+  /* 大きな数字＝ビューポート中央に固定（位置は動かさない＝端末を周辺に構えるため） */
+  .bigNum{
+    position:fixed; inset:0; z-index:40; margin:0; pointer-events:none;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; color:var(--ink); line-height:1; letter-spacing:0;
+    text-shadow:0 2px 18px rgba(0,0,0,.45);
+  }
+  /* レベルで文字サイズだけ変わる */
+  body.lv1 .bigNum{ font-size:min(60vw,60vh); }
+  body.lv2 .bigNum{ font-size:min(38vw,38vh); }
+  body.lv3 .bigNum{ font-size:min(22vw,22vh); }
+
+  /* 中央帯HUD：カウンタ＋「次の数字まで」バー（薄く） */
+  .hudTop{ position:fixed; left:50%; top:calc(50% - 172px); transform:translateX(-50%); z-index:42;
+    display:flex; flex-direction:column; align-items:center; gap:10px; width:min(80vw,320px); pointer-events:none; }
+  .hudCount{ font-size:16px; font-weight:800; color:var(--muted); white-space:nowrap;
+    background:rgba(11,26,32,.55); padding:4px 12px; border-radius:10px; }
+  .hudBar{ width:100%; height:6px; border-radius:6px; background:var(--line); overflow:hidden; opacity:.55; }
+  .hudBar > i{ display:block; height:100%; width:0%; background:var(--accent); border-radius:6px; transition:width .12s linear; }
+  .keepHint{ position:fixed; left:50%; top:calc(50% + 190px); transform:translateX(-50%); z-index:42;
+    width:min(86vw,340px); font-size:12.5px; color:var(--muted); text-align:center; pointer-events:none; }
+  /* ボタン列は中央下の安全帯に固定＝目印を見たままでも押せる位置 */
+  #numRun > .cta{ position:fixed; left:50%; top:calc(50% + 120px); transform:translateX(-50%); z-index:42;
+    width:min(88vw,340px); margin:0; }
+
+  /* 結果カード */
+  .result{ padding:18px; border-radius:18px; background:var(--card); border:1px solid var(--line); font-size:16px; line-height:1.9; }
+  .result b{ color:var(--accent); }
+
+  /* CTA */
+  .cta{ margin-top:auto; }
+  .btn{ width:100%; min-height:54px; padding:16px; border-radius:16px; font-size:17px; font-weight:800;
+    color:var(--accentInk); background:linear-gradient(180deg,var(--accent),var(--accent2)); }
+  .btn:active{ transform:translateY(1px); }
+  .btn.ghost{ color:var(--ink); background:transparent; border:1px solid var(--line); }
+  .row{ display:flex; gap:12px; }
+  .row .btn{ flex:1; }
+  .spacer{ height:16px; }
+
+  /* なぜ効くの？ */
+  details.why{ margin-top:22px; border-top:1px solid var(--line); padding-top:16px; }
+  details.why summary{ list-style:none; cursor:pointer; font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px; }
+  details.why summary::-webkit-details-marker{ display:none; }
+  details.why summary::before{ content:"＋"; color:var(--accent); }
+  details.why[open] summary::before{ content:"－"; }
+  details.why .body{ font-size:14px; color:var(--muted); line-height:1.95; margin-top:12px; }
+  details.why .step b{ color:var(--accent); margin-right:4px; }
+  details.why .note{ margin-top:10px; opacity:.85; }
+  details.why .rel{ margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+  details.why .rel a{ font-size:14px; color:var(--ink); text-decoration:none; padding:11px 13px;
+    border:1px solid var(--line); border-radius:12px; display:flex; gap:8px; align-items:center; }
+  details.why .rel a::before{ content:"▶"; color:var(--accent); font-size:9px; }
+  details.why .ch{ display:inline-block; margin-top:12px; font-size:13px; }
+
+  /* Push opt-in カード */
+  .optin-card{ margin-top:20px; padding:18px; border-radius:18px; background:rgba(127,224,205,.09);
+    border:1px solid rgba(127,224,205,.3); }
+  .optin-card h3{ font-size:16px; font-weight:800; margin-bottom:8px; }
+  .optin-card p{ font-size:13.5px; color:var(--muted); line-height:1.8; margin-bottom:12px; }
+  .optin-card input[type=time]{ font-family:inherit; font-size:16px; font-weight:700; color:var(--ink);
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:12px; }
+
+  /* フッター */
+  footer{ padding:20px 20px calc(20px + env(safe-area-inset-bottom)); text-align:center; }
+  .med{ font-size:11.5px; color:var(--muted); line-height:1.75; }
+  .fnt-copy{ display:block; margin-top:14px; font-size:11px; letter-spacing:.14em; color:var(--muted); opacity:.8; }
+
+  /* サイドメニュー（モーダルでない・オーバーレイ＋スライド） */
+  .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); opacity:0; visibility:hidden;
+    transition:opacity .3s ease, visibility .3s ease; z-index:80; }
+  .overlay.open{ opacity:1; visibility:visible; }
+  .side{ position:fixed; top:0; right:0; height:100%; width:min(84%,340px); z-index:90;
+    background:var(--bg1); border-left:1px solid var(--line); transform:translateX(100%);
+    transition:transform .3s ease; display:flex; flex-direction:column;
+    padding:calc(16px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+    overflow-y:auto; }
+  .side.open{ transform:translateX(0); }
+  .side .top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .side .top b{ font-size:16px; font-weight:800; }
+  .side .closeBtn{ width:44px; height:44px; border-radius:12px; background:var(--card); color:var(--ink); font-size:20px; }
+  .side h4{ font-size:12px; letter-spacing:.14em; color:var(--accent); margin:18px 0 10px; }
+  .side .toggle-row{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 16px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
+  .side .toggle-row span{ font-size:15px; }
+  .switch{ position:relative; width:54px; height:30px; flex:none; }
+  .switch input{ position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .switch .slider{ position:absolute; inset:0; background:var(--line); border-radius:30px; transition:.2s; }
+  .switch .slider::before{ content:""; position:absolute; width:24px; height:24px; left:3px; top:3px;
+    background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider{ background:var(--accent2); }
+  .switch input:checked + .slider::before{ transform:translateX(24px); }
+  .side .whybox{ font-size:13px; color:var(--muted); line-height:1.95; }
+  .side .whybox .step b{ color:var(--accent); margin-right:4px; }
+  .side .whybox .note{ margin-top:10px; opacity:.85; }
+  .side .guide{ font-size:13px; color:var(--muted); line-height:1.9; }
+  .side .guide ol{ padding-left:20px; }
+  .side .learn{ margin-top:auto; padding-top:22px; }
+  .side .learn a{ font-size:14px; text-decoration:none; display:block; padding:12px 0; }
+  .side .side-copy{ font-size:10.5px; letter-spacing:.1em; color:var(--muted); opacity:.7; margin-top:14px; }
+
+  /* トースト */
+  .toast{ position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px);
+    background:rgba(18,49,56,.98); border:1px solid var(--line); color:var(--ink); font-size:13.5px;
+    padding:12px 18px; border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:120;
+    opacity:0; visibility:hidden; transition:opacity .25s ease, transform .25s ease, visibility .25s ease; max-width:88%; text-align:center; }
+  .toast.show{ opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+
+  /* 音声ロック警告バナー */
+  .lockbar{ position:fixed; left:12px; right:12px; top:calc(10px + env(safe-area-inset-top)); max-width:456px; margin:0 auto;
+    background:rgba(255,180,168,.14); border:1px solid var(--danger); color:var(--ink); font-size:12.5px; line-height:1.6;
+    padding:10px 14px; border-radius:12px; z-index:130; opacity:0; visibility:hidden; transition:opacity .3s ease, visibility .3s ease; }
+  .lockbar.show{ opacity:1; visibility:visible; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ S0 スプラッシュ（起動時だけ／AudioContext unlock） ============ -->
+<div id="splash" role="dialog" aria-label="頭頂葉（空間認識）トレーナーを開始">
+  <img src="FNT512.png" alt="FNT ロゴ" />
+  <div class="fnt">FUNCTIONAL NEURO TRAINING</div>
+  <h1>頭頂葉（空間認識）</h1>
+  <p class="lead">正面の目印を見つめたまま、"視界のはし"で数字を読む。</p>
+  <button class="tapstart" id="tapStart">タップで開始</button>
+  <div class="copy">© Functional Neuro Training / Legrandchariot</div>
+</div>
+
+<!-- ============ 本体 ============ -->
+<div class="app" id="app" aria-hidden="true">
+  <header>
+    <div class="logo"><img src="FNT512-transparent.png" alt="" /><b>頭頂葉トレーナー</b></div>
+    <button class="menuBtn" id="menuBtn" aria-label="メニューを開く" aria-haspopup="true">☰</button>
+  </header>
+
+  <main>
+    <!-- S1 やり方解説 -->
+    <section class="screen scroll" id="s1">
+      <div class="step-label">STEP 1 / やり方</div>
+      <h2>"視界のはし"で数字を読む練習</h2>
+      <ol class="setupList">
+        <li><span class="no">1</span><div>スマホではなく、<b>正面の動かない目印</b>（壁の一点・向かいの物など）を決めて、まっすぐ見つめてね。</div></li>
+        <li><span class="no">2</span><div>スマホは<b>視界のはし</b>に構える。上下・左右・斜め、どの方向でも大丈夫。</div></li>
+        <li><span class="no">3</span><div>目印から目を離さず、<b>10秒ごとに変わる数字を"視界のはし"で読む</b>よ。</div></li>
+        <li><span class="no">4</span><div>読めなかったら、スマホを少しずつ<b>中心（正面）に近づけて</b>、読める場所を探してね。そこが今の周辺視野の広さだよ。</div></li>
+      </ol>
+      <div class="subtitle" id="sub1" aria-live="polite">
+        <span class="who">ガイド</span>正面の動かない目印を見つめたまま、スマホを視界のはしに構えてね。10秒ごとに変わる数字を、横目で読んでみよう。
+      </div>
+      <div class="cta">
+        <button class="btn" id="toS2">レベルを選ぶ</button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+
+    <!-- S2 レベル選択 -->
+    <section class="screen scroll" id="s2">
+      <div class="step-label">STEP 2 / レベルを選ぶ</div>
+      <h2>まずは大きい文字から</h2>
+      <p class="desc">文字の大きさだけが変わるよ。<b>特大でラクに読めたら、中・小へ</b>。読めなくても大丈夫、スマホを少し中心に寄せて読める場所を探すのが練習だよ。</p>
+      <div class="levelList" role="group" aria-label="レベルを選ぶ">
+        <button class="levelBtn" data-lv="1"><span class="lv">1</span><span class="txt"><b>レベル1：特大</b><small>まずはここから。視界のはしでも読みやすい大きさ</small></span></button>
+        <button class="levelBtn" data-lv="2"><span class="lv">2</span><span class="txt"><b>レベル2：中</b><small>少し小さめ。周辺視野をもう一段ためす</small></span></button>
+        <button class="levelBtn" data-lv="3"><span class="lv">3</span><span class="txt"><b>レベル3：小</b><small>いちばん小さい。よりはしで読めるかチャレンジ</small></span></button>
+      </div>
+      <div class="spacer"></div>
+    </section>
+
+    <!-- S3 ゲーム（全画面・周辺視野で数字を読む） -->
+    <section class="screen scroll" id="s3">
+      <div id="numRun">
+        <!-- 中央に大きな数字（位置は固定） -->
+        <div class="bigNum" id="bigNum" aria-hidden="true"></div>
+        <!-- 中央帯HUD：n/12 と「次の数字まで」バー -->
+        <div class="hudTop">
+          <div class="hudCount" id="hudCount" aria-live="polite">1 / 12</div>
+          <div class="hudBar" aria-hidden="true"><i id="hudBarFill"></i></div>
+        </div>
+        <p class="keepHint" id="wakeHint" style="display:none;">※ときどき画面を触っていてね（自動で暗くならないようにするためだよ）。</p>
+        <div class="cta">
+          <div class="row">
+            <button class="btn ghost" id="pauseEx" aria-label="一時停止／再開">一時停止</button>
+            <button class="btn ghost" id="stopEx">やめる</button>
+          </div>
+          <div class="spacer"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- S4 結果 -->
+    <section class="screen scroll" id="s4">
+      <div class="step-label">RESULT</div>
+      <h2 id="resultTitle">おつかれさま</h2>
+      <div class="result" id="resultBody" aria-live="polite"></div>
+
+      <!-- Push opt-in（初回のみ） -->
+      <div class="optin-card" id="optinCard" role="group" aria-label="毎日のリマインド設定" style="display:none;">
+        <h3>毎日この時間にリマインドする？</h3>
+        <p>周辺視野の練習は「くり返し」で神経が慣れていくよ。毎日そっと思い出させる通知を送れるよ（あとで切ってもOK）。</p>
+        <label for="remTime" style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px;">通知する時間</label>
+        <input type="time" id="remTime" value="21:00" />
+        <div class="row">
+          <button class="btn" id="remYes">はい、通知して</button>
+          <button class="btn ghost" id="remLater">あとで</button>
+        </div>
+      </div>
+
+      <!-- なぜ効くの？ -->
+      <details class="why">
+        <summary>なぜ効くの？（神経科学の話）</summary>
+        <div class="body">
+          <p class="step"><b>A.</b>周辺視野でモノの位置や動きを捉えるのは、主に<b>頭頂葉（とうちょうよう）</b>と「<b>背側視覚経路（はいそくしかくけいろ＝“どこ・どうやって”経路）</b>」のはたらき、と考えられているよ。</p>
+          <p class="step"><b>B.</b>中心（はっきり見える所）ではなく<b>“視界のはし”で捉える</b>練習は、空間を把握するこのネットワークに刺激を入れる、という考え方だよ。</p>
+          <p class="step"><b>C.</b>正面の目印に視線を固定したまま、はしに来た数字を読む ── 中心視と周辺視の使い分けに、いつもと違う"注文"が入るんだ。</p>
+          <p class="note"><b>差別化のひとこと：</b>「目のよさ＝視力」だけで見ないで、<b>空間を把握する脳（頭頂葉・背側視覚経路）</b>から見る。ここが、他ではあまり知れない神経科学からの本質だよ。</p>
+          <p class="note">※これは視力や病気を「治す」ものではありません。感じ方には個人差があるよ。あくまで脳と眼の使い方を整える一つの考え方として、無理なく楽しんでね。</p>
+          <p class="note" style="color:var(--danger);">強い不快感・めまい・気分の悪さが出たらすぐ中止してね。視野が欠ける／片目だけ見えにくい／急に見えづらくなった／眼の痛みがある ── こうしたときは自己判断せず医療機関（眼科など）を受診してね。目の既往がある方は主治医に相談してね。</p>
+          <div class="rel">
+            <a href="{{PLACEHOLDER_RELATED_1}}" target="_blank" rel="noopener">関連動画①（宮崎確定待ち）</a>
+            <a href="{{PLACEHOLDER_RELATED_2}}" target="_blank" rel="noopener">関連動画②（宮崎確定待ち）</a>
+          </div>
+          <a class="ch" href="https://www.youtube.com/channel/UCyZ2zrHx_8p96fJNt_VjjrA" target="_blank" rel="noopener">▶ カラダマニアちゃんねる</a>
+        </div>
+      </details>
+
+      <div class="cta">
+        <div class="spacer"></div>
+        <button class="btn" id="again">もう一度やる</button>
+        <div class="spacer"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p class="med">このアプリは眼と体を整えるためのセルフケアで、医療行為ではありません。視力や病気の診断・治療ではありません。強い不快感・めまいが出たときは中止してください。急な視力低下・片目だけの見えにくさ・視野の欠け・眼の痛みなどがある場合は、医療機関（眼科など）を受診してください。体調がすぐれないときは無理をしないでね。</p>
+    <span class="fnt-copy">© Functional Neuro Training / Legrandchariot</span>
+  </footer>
+</div>
+
+<!-- ============ サイドメニュー ============ -->
+<div class="overlay" id="overlay"></div>
+<nav class="side" id="side" aria-label="メニュー" aria-hidden="true">
+  <div class="top"><b>メニュー</b><button class="closeBtn" id="closeMenu" aria-label="メニューを閉じる">×</button></div>
+
+  <h4>リマインド</h4>
+  <div class="toggle-row">
+    <span>毎日リマインド</span>
+    <label class="switch"><input type="checkbox" id="remToggle" aria-label="毎日リマインドのオンオフ" /><span class="slider"></span></label>
+  </div>
+
+  <h4>なぜ効くの？（神経科学）</h4>
+  <div class="whybox">
+    <p class="step"><b>周辺視野＝頭頂葉・背側視覚経路（“どこ・どうやって”経路）のはたらき、と考えられているよ。</b>中心ではなく“視界のはし”で数字を捉える練習で、空間を把握するこのネットワークに刺激を入れる、という考え方だよ。</p>
+    <p class="note">「視力」だけでなく“空間を把握する脳”から見る ── ここが他では知れない神経科学からの本質だよ。※「治す」ものではなく、感じ方には個人差があるよ。</p>
+  </div>
+
+  <h4>ホーム画面に追加すると使いやすい</h4>
+  <div class="guide" id="installGuide">
+    <ol>
+      <li>共有ボタン（□から↑のマーク）を押す</li>
+      <li>「ホーム画面に追加」を選ぶ</li>
+    </ol>
+    <p style="margin-top:8px;">通知を使うときは、ホーム追加のあとアプリを開いて「はい、通知して」を押してね。※追加しなくてもアプリはぜんぶ使えるよ。</p>
+  </div>
+
+  <div class="learn">
+    <a href="https://bodydiscovery.info/owned-optin" target="_blank" rel="noopener">もっと学びたい人へ → https://bodydiscovery.info/owned-optin</a>
+    <span class="side-copy">© Functional Neuro Training / Legrandchariot</span>
+  </div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="lockbar" id="lockbar" role="alert">音声を再生できませんでした。字幕と画面だけでも、そのまま進められるよ。</div>
+
+<script>
+/* =====================================================================
+   頭頂葉（空間認識）トレーナー ─ 周辺視野で数字を読む ─ 本体JS
+   ・状態は window. に載せる（iOSメモリ対策）
+   ・タイマー／進行は Date.now() 壁時計
+   ・音声＝人間ナレーションmp3（鳴らせない時だけTTSへフォールバック）
+   ・Web Push はクライアント側のみ（送信サーバは別途／VAPID待ち）
+   ===================================================================== */
+
+/* ---- Web Push 設定（サーバ未実装：本体は動くこと） ---- */
+const VAPID_PUBLIC = '__VAPID_PUBLIC_PLACEHOLDER__';
+// TODO(server): 購読オブジェクトの送信先。VAPID鍵と /subscribe API は宮崎インフラ側で用意する。
+const SUBSCRIBE_ENDPOINT = '/subscribe';
+
+/* ---- localStorage キー ---- */
+const LS = { enabled:'shiya.reminderEnabled', time:'shiya.reminderTime', asked:'shiya.pushAsked' };
+
+const $ = (id) => document.getElementById(id);
+
+/* ---- --vh 保険（iOSアドレスバー対策） ---- */
+function setVH(){ document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px'); }
+setVH();
+window.addEventListener('resize', setVH);
+window.addEventListener('orientationchange', setVH);
+
+/* =========================================================
+   音声：WebAudioでunlock＋合図音、読み上げはTTS（無ければ字幕のみ）
+   ========================================================= */
+window.audioCtx = null;
+window.audioReady = false;
+
+function unlockAudio(){
+  try{
+    if(!window.audioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      window.audioCtx = new AC();
+    }
+    if(window.audioCtx.state === 'suspended') window.audioCtx.resume();
+    // 無音ダミーを鳴らしてunlock
+    const buf = window.audioCtx.createBuffer(1, 1, 22050);
+    const src = window.audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(window.audioCtx.destination); src.start(0);
+    window.audioReady = true;
+  }catch(e){
+    window.audioReady = false;
+    showLockbar();
+  }
+}
+
+function showLockbar(){
+  const b = $('lockbar'); b.classList.add('show');
+  setTimeout(()=>b.classList.remove('show'), 5000);
+}
+
+/* 合図音（数字の切替）。失敗しても継続。 */
+function beep(freq, dur){
+  if(!window.audioReady || !window.audioCtx) return;
+  try{
+    const o = window.audioCtx.createOscillator();
+    const g = window.audioCtx.createGain();
+    o.frequency.value = freq; o.type = 'sine';
+    o.connect(g); g.connect(window.audioCtx.destination);
+    const t = window.audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.02);
+  }catch(e){/* 継続 */}
+}
+
+/* 読み上げ（TTS）。人間ナレーションmp3が鳴らせない時のフォールバック。字幕は常に表示済み。 */
+function speak(text){
+  try{
+    if(!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP'; u.rate = 0.98; u.pitch = 1.0;
+    window.speechSynthesis.speak(u);
+  }catch(e){/* 字幕のみで継続 */}
+}
+
+/* ガイド音声（人間ナレーションmp3）。局面ごとに1本。失敗時はTTSにフォールバック。字幕は別途表示済み。 */
+const GUIDE_SRC = {
+  intro: 'audio/guide-intro.mp3',   // やり方解説（約32秒）
+  done:  'audio/guide-done.mp3'     // 完了ナレーション（神経科学のひとこと入り）
+};
+/* ★iOS対策：Audio要素は使い回す（毎回 new Audio すると、最初のタップ以外＝タイマー発火の
+   再生がiOSにブロックされ、以降のガイドが無音orTTSに落ちる）。1要素をタップ内の初回playで
+   unlockし、以降 src を差し替えて再生する（呼吸アプリと同方式）。 */
+function playGuide(key, fallbackText){
+  try{
+    const src = GUIDE_SRC[key];
+    if(!src){ if(fallbackText) speak(fallbackText); return; }
+    try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}  // 残ったTTSを止める（二重防止）
+    if(!window.guideEl) window.guideEl = new Audio();
+    const a = window.guideEl;
+    try{ a.pause(); }catch(e){}           // 前のガイドを止めて頭から
+    a.onended = null;
+    a.src = src;
+    a.currentTime = 0;
+    const p = a.play();
+    // ★AbortError（src差し替え/pauseで再生が中断）でTTSを鳴らすと人間音声と二重になる＝無視。
+    //   本当に自動再生ブロック(NotAllowedError)の時だけTTSにフォールバック。
+    if(p && typeof p.catch === 'function'){ p.catch(err=>{ if(err && err.name === 'NotAllowedError' && fallbackText) speak(fallbackText); }); }
+  }catch(e){ if(fallbackText) speak(fallbackText); }
+}
+function stopGuide(){ try{ if(window.guideEl){ window.guideEl.pause(); window.guideEl.currentTime = 0; } }catch(e){} }
+function stopSpeak(){
+  try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){}
+  stopGuide();
+}
+
+/* =========================================================
+   画面遷移
+   ========================================================= */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = $(id);
+  if(el){ el.classList.add('active'); el.scrollTop = 0; }
+  window.currentScreen = id;
+}
+
+/* =========================================================
+   スプラッシュ → 本体
+   ========================================================= */
+$('tapStart').addEventListener('click', () => {
+  unlockAudio();
+  $('splash').classList.add('hide');
+  $('app').setAttribute('aria-hidden','false');
+  showScreen('s1');
+  playGuide('intro', '正面の動かない目印を見つめたまま、スマホを視界のはしに構えてね。十秒ごとに変わる数字を、横目で読んでみよう。読めなかったら、スマホを少しずつ中心に近づけて、読める場所を探してね。');
+});
+
+/* S1 → S2（レベル選択）。S1を離れるのでガイドを止める */
+$('toS2').addEventListener('click', () => {
+  stopSpeak(); stopGuide();
+  showScreen('s2');
+});
+
+/* S2 レベル選択 → ゲーム開始 */
+document.querySelectorAll('.levelBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const lv = parseInt(btn.dataset.lv, 10) || 1;
+    startGame(lv);
+  });
+});
+
+$('stopEx').addEventListener('click', () => { cancelGame(); showScreen('s2'); });
+
+/* --- 一時停止／再開（「やめる」とは別。タイマー・数字切替・音声を止め、再開で続きから）--- */
+function setPauseBtn(paused){ const b = $('pauseEx'); if(b) b.textContent = paused ? '再開' : '一時停止'; }
+function togglePause(){
+  // ゲーム中でも一時停止中でもない（＝待機/結果画面）なら無視
+  if(!window.gTimer && !window.gPaused) return;
+  if(!window.gPaused){
+    // 一時停止：進行を止める。gStart はいじらず、止めていた時間だけ後で差し引く
+    window.gPaused = true;
+    window.gPauseStart = Date.now();
+    clearInterval(window.gTimer); window.gTimer = null;
+    $('hudCount').textContent = '一時停止中';
+    setPauseBtn(true);
+    releaseWakeLock();
+  }else{
+    // 再開：止まっていた分を累積へ加え、elapsed から差し引く（経過に加算しない）
+    window.gPaused = false;
+    window.gPausedAccum = (window.gPausedAccum || 0) + (Date.now() - window.gPauseStart);
+    window.gIdx = -2;                // hudCount を正しい表示に戻す（強制再描画）
+    setPauseBtn(false);
+    acquireWakeLock();
+    window.gTimer = setInterval(tickGame, 90);
+  }
+}
+$('pauseEx').addEventListener('click', togglePause);
+
+/* =========================================================
+   周辺視野・数字トレーニング 本体
+   ・正面の目印を注視し、視界のはしに構えた画面中央の数字を読む
+   ・NUM_MS ごとに数字が切り替わる。1セッション＝ROUNDS 問
+   ・進行は Date.now 壁時計、Screen Wake Lock 取得
+   ========================================================= */
+const NUM_MS = 10000;   // 数字の切替間隔(ms)＝10秒
+const ROUNDS = 12;      // 1セッションの問題数（約2分）
+const LEVEL_LABEL = { 1:'レベル1：特大', 2:'レベル2：中', 3:'レベル3：小' };
+
+window.wakeLock = null;
+
+async function acquireWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      window.wakeLock = await navigator.wakeLock.request('screen');
+      $('wakeHint').style.display = 'none';
+    }else{
+      $('wakeHint').style.display = 'block';
+    }
+  }catch(e){
+    $('wakeHint').style.display = 'block';
+  }
+}
+function releaseWakeLock(){
+  try{ if(window.wakeLock){ window.wakeLock.release(); window.wakeLock = null; } }catch(e){}
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && window.gTimer){ acquireWakeLock(); }
+});
+
+/* ゲーム開始（level: 1=特大 / 2=中 / 3=小） */
+function startGame(level){
+  window.gLevel = level;
+  document.body.classList.remove('lv1','lv2','lv3');
+  document.body.classList.add('lv' + level);
+  document.body.classList.add('playing');
+  showScreen('s3');
+  $('bigNum').textContent = '';
+  $('hudCount').textContent = '1 / ' + ROUNDS;
+  $('hudBarFill').style.width = '0%';
+  window.gStart = Date.now();
+  window.gPausedAccum = 0; window.gPaused = false; setPauseBtn(false);
+  window.gIdx = -1;        // 未表示
+  window.gPrevNum = -1;    // 直前の数字（連続同一を避ける）
+  acquireWakeLock();
+  beep(660, 0.15);
+  clearInterval(window.gTimer);
+  window.gTimer = setInterval(tickGame, 90);
+}
+
+function tickGame(){
+  const elapsed = Date.now() - window.gStart - (window.gPausedAccum || 0); // 一時停止分は差し引く
+  const idx = Math.floor(elapsed / NUM_MS);
+  if(idx >= ROUNDS){ finishGame(); return; }
+
+  const inNum = elapsed - idx * NUM_MS;   // この数字内の経過ms
+
+  // 数字が変わった瞬間：新しい数字（直前と違う）＋合図音（★答えは読み上げない）
+  if(idx !== window.gIdx){
+    window.gIdx = idx;
+    let n;
+    do { n = Math.floor(Math.random() * 10); } while(n === window.gPrevNum);
+    window.gPrevNum = n;
+    $('bigNum').textContent = n;
+    $('hudCount').textContent = (idx + 1) + ' / ' + ROUNDS;
+    beep(700, 0.12);
+  }
+
+  // 「次の数字まで」バー（薄く）
+  $('hudBarFill').style.width = (inNum / NUM_MS * 100) + '%';
+}
+
+function finishGame(){
+  clearInterval(window.gTimer); window.gTimer = null;
+  window.gPaused = false; window.gPausedAccum = 0; setPauseBtn(false);
+  document.body.classList.remove('playing','lv1','lv2','lv3');
+  releaseWakeLock();
+  beep(880, 0.3);
+  stopSpeak();
+  const lvLabel = LEVEL_LABEL[window.gLevel] || LEVEL_LABEL[1];
+  $('resultBody').innerHTML =
+    '今回：<b>' + ROUNDS + '問</b>（' + lvLabel + '）、おつかれさま！<br>' +
+    '正面の目印を見たまま“視界のはし”で数字を読む ── 空間を把握する頭頂葉・背側視覚経路に、いつもと違う刺激が入ったよ。' +
+    'ラクに読めたら次はレベルを一段上げてみてね。感じ方には個人差があるから、気楽にくり返そう。';
+  showScreen('s4');
+  playGuide('done', 'おつかれさま。正面の目印を見たまま、視界のはしで数字を読む練習だったよ。これは空間を把握する頭頂葉や背側視覚経路のはたらきに刺激を入れる、という考え方なんだ。またくり返してみてね。');
+  maybeShowOptin();
+}
+
+/* 「やめる」＝中断してレベル選択へ */
+function cancelGame(){
+  clearInterval(window.gTimer); window.gTimer = null;
+  window.gPaused = false; window.gPausedAccum = 0; setPauseBtn(false);
+  document.body.classList.remove('playing','lv1','lv2','lv3');
+  releaseWakeLock(); stopSpeak();
+  $('bigNum').textContent = '';
+}
+
+/* もう一度 → レベル選択へ */
+$('again').addEventListener('click', () => {
+  showScreen('s2');
+});
+
+/* =========================================================
+   Push opt-in（S4 初回のみ）
+   ========================================================= */
+function maybeShowOptin(){
+  const asked = localStorage.getItem(LS.asked);
+  const enabled = localStorage.getItem(LS.enabled) === 'true';
+  if(asked || enabled){ $('optinCard').style.display = 'none'; return; }
+  $('optinCard').style.display = '';
+}
+
+$('remYes') && $('remYes').addEventListener('click', async () => {
+  const time = $('remTime').value || '21:00';
+  localStorage.setItem(LS.time, time);
+  localStorage.setItem(LS.asked, 'true');
+  await enableReminder(time);
+  $('optinCard').style.display = 'none';
+  syncToggle();
+});
+$('remLater') && $('remLater').addEventListener('click', () => {
+  localStorage.setItem(LS.asked, 'true');
+  $('optinCard').style.display = 'none';
+});
+
+/* リマインド ON：通知許可（操作直下）→ push購読（失敗しても本体継続） */
+async function enableReminder(time){
+  try{
+    if(!('Notification' in window)){ toast('この端末は通知に対応していないみたい'); return false; }
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ toast('通知はオフのままにしたよ'); localStorage.setItem(LS.enabled,'false'); return false; }
+    localStorage.setItem(LS.enabled, 'true');
+    localStorage.setItem(LS.time, time || localStorage.getItem(LS.time) || '21:00');
+    await subscribePush();   // 送信サーバが無くても catch して継続
+    toast('毎日 ' + (localStorage.getItem(LS.time)) + ' にリマインドするね');
+    return true;
+  }catch(e){
+    toast('通知の設定でエラーが出たよ（アプリはそのまま使えるよ）');
+    return false;
+  }
+}
+function disableReminder(){
+  localStorage.setItem(LS.enabled, 'false');
+  toast('毎日リマインドをオフにしたよ');
+  // 購読解除はサーバ実装後に対応（TODO）。ローカルフラグのみ更新。
+}
+
+async function subscribePush(){
+  try{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC)
+      });
+    }
+    // TODO(server): 購読情報を送信サーバへ登録する。
+    // fetch(SUBSCRIBE_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'},
+    //   body: JSON.stringify({ subscription: sub, time: localStorage.getItem(LS.time) }) });
+  }catch(e){
+    // VAPID未設定 or サーバ無し → 本体は継続。時刻はローカル保存済み。
+    console.warn('[push] subscribe skipped:', e && e.message);
+  }
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+/* =========================================================
+   サイドメニュー（フォーカストラップ＋ESC）
+   ========================================================= */
+const side = $('side'), overlay = $('overlay');
+window.lastFocus = null;
+
+function openMenu(){
+  window.lastFocus = document.activeElement;
+  side.classList.add('open'); overlay.classList.add('open');
+  side.setAttribute('aria-hidden','false');
+  $('closeMenu').focus();
+  document.addEventListener('keydown', menuKeydown);
+}
+function closeMenu(){
+  side.classList.remove('open'); overlay.classList.remove('open');
+  side.setAttribute('aria-hidden','true');
+  document.removeEventListener('keydown', menuKeydown);
+  if(window.lastFocus && window.lastFocus.focus) window.lastFocus.focus();
+}
+function menuKeydown(e){
+  if(e.key === 'Escape'){ closeMenu(); return; }
+  if(e.key === 'Tab'){
+    const f = side.querySelectorAll('button, a[href], input, [tabindex]:not([tabindex="-1"])');
+    if(!f.length) return;
+    const first = f[0], last = f[f.length-1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  }
+}
+$('menuBtn').addEventListener('click', openMenu);
+$('closeMenu').addEventListener('click', closeMenu);
+overlay.addEventListener('click', closeMenu);
+
+/* リマインドトグル（確認ダイアログなし・トーストのみ） */
+const remToggle = $('remToggle');
+function syncToggle(){ remToggle.checked = localStorage.getItem(LS.enabled) === 'true'; }
+remToggle.addEventListener('change', async () => {
+  if(remToggle.checked){
+    const time = localStorage.getItem(LS.time) || '21:00';
+    const ok = await enableReminder(time);
+    remToggle.checked = ok;   // 許可されなければ戻す
+  }else{
+    disableReminder();
+  }
+});
+
+/* トースト */
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(window.toastTimer);
+  window.toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* 初期化 */
+syncToggle();
+
+/* =========================================================
+   Service Worker 登録 ＋ controllerchange で自動リロード
+   ========================================================= */
+if('serviceWorker' in navigator){
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(refreshing) return; refreshing = true; window.location.reload();
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('[SW] register failed', err));
+  });
+}
+</script>
+</body>
+</html>
