@@ -2,7 +2,7 @@
 // 戦略：Network First（新しいコードを最優先で拾う → 開発ナレッジ準拠）。
 //       オフライン時のみキャッシュへフォールバック。
 // index.html 側で controllerchange を検知して location.reload() する前提。
-const CACHE_NAME = 'shiya-v1.0.0';
+const CACHE_NAME = 'shiya-v1.0.1';
 
 const ASSETS_TO_CACHE = [
   './',

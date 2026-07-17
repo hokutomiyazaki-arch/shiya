@@ -56,7 +56,8 @@
     transition:opacity .45s ease, visibility .45s ease;
   }
   #splash.hide{ opacity:0; visibility:hidden; pointer-events:none; }
-  #splash img{ width:132px; height:132px; margin-bottom:22px; border-radius:26px; }
+  #splash img{ width:150px; height:150px; margin-bottom:22px; object-fit:contain; animation:spIn .8s ease both; }
+  @keyframes spIn{ from{ opacity:0; transform:scale(.92); } to{ opacity:1; transform:scale(1); } }
   #splash .fnt{ font-size:13px; letter-spacing:.24em; color:var(--muted); margin-bottom:14px; }
   #splash h1{ font-size:27px; font-weight:800; color:var(--accent); margin-bottom:10px; }
   #splash .lead{ font-size:14px; color:var(--muted); margin-bottom:30px; }
@@ -237,7 +238,7 @@
 
 <!-- ============ S0 スプラッシュ（起動時だけ／AudioContext unlock） ============ -->
 <div id="splash" role="dialog" aria-label="頭頂葉（空間認識）トレーナーを開始">
-  <img src="FNT512.png" alt="FNT ロゴ" />
+  <img src="FNT512-transparent.png" alt="FNT ロゴ" />
   <div class="fnt">FUNCTIONAL NEURO TRAINING</div>
   <h1>頭頂葉（空間認識）</h1>
   <p class="lead">正面の目印を見つめたまま、"視界のはし"で数字を読む。</p>
