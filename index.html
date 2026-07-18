@@ -68,6 +68,26 @@
   }
   #splash .copy{ position:absolute; bottom:calc(20px + env(safe-area-inset-bottom)); font-size:11px; color:var(--muted); }
   @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
+  /* 音声ガイド案内＋その場ミュートトグル（スプラッシュ／ゲーム共通） */
+  #splash .audioNote{ margin-top:22px; font-size:12.5px; color:var(--muted); }
+  .muteToggle{ margin-top:10px; min-height:44px; padding:10px 22px; border-radius:14px;
+    font-size:14px; font-weight:800; color:var(--ink); background:var(--card); border:1px solid var(--line); }
+  .muteToggle:active{ transform:translateY(1px); }
+  .muteToggle.off{ color:var(--danger); border-color:var(--danger); }
+
+  /* ゲーム中：構える方向インジケータ（画面上部・数字と重ならない） */
+  .dirTop{ position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 14px); transform:translateX(-50%);
+    z-index:43; display:none; flex-direction:column; align-items:center; gap:2px; pointer-events:none;
+    background:rgba(11,26,32,.62); padding:8px 20px 10px; border-radius:18px; border:1px solid var(--line); }
+  body.playing .dirTop{ display:flex; }
+  .dirTop .dirArrow{ font-size:52px; line-height:1; color:var(--accent); text-shadow:0 2px 12px rgba(0,0,0,.5); }
+  .dirTop .dirLabel{ font-size:15px; font-weight:800; color:var(--ink); letter-spacing:.04em; }
+  .dirTop .dirCap{ font-size:10.5px; font-weight:700; color:var(--muted); }
+  /* ゲーム中の小さなミュートトグル（右下・安全帯） */
+  #muteToggleGame{ position:fixed; right:14px; top:calc(env(safe-area-inset-top) + 14px); z-index:43;
+    display:none; width:auto; min-height:40px; padding:8px 12px; border-radius:12px; font-size:12px;
+    pointer-events:auto; }
+  body.playing #muteToggleGame{ display:inline-block; }
 
   /* ===== レイアウト ===== */
   .app{ width:100%; max-width:480px; margin:0 auto; min-height:100vh; min-height:calc(var(--vh) * 100);
@@ -243,6 +263,8 @@
   <h1>頭頂葉（空間認識）</h1>
   <p class="lead">正面の目印を見つめたまま、"視界のはし"で数字を読む。</p>
   <button class="tapstart" id="tapStart">タップで開始</button>
+  <div class="audioNote">🔊 音声ガイドが流れます（構える方向を読み上げ）</div>
+  <button class="muteToggle" id="muteToggleSplash" type="button" aria-pressed="false">🔊 音声オン</button>
   <div class="copy">© Functional Neuro Training / Legrandchariot</div>
 </div>
 
@@ -289,6 +311,13 @@
     <!-- S3 ゲーム（全画面・周辺視野で数字を読む） -->
     <section class="screen scroll" id="s3">
       <div id="numRun">
+        <!-- 構える方向インジケータ（音声と同期／ミュートでも表示） -->
+        <div class="dirTop" id="dirTop" aria-live="polite">
+          <div class="dirArrow" id="dirArrow"></div>
+          <div class="dirLabel" id="dirLabel"></div>
+          <div class="dirCap">の方向にスマホを構える</div>
+        </div>
+        <button class="btn ghost muteToggle" id="muteToggleGame" type="button" aria-pressed="false">🔊</button>
         <!-- 中央に大きな数字（位置は固定） -->
         <div class="bigNum" id="bigNum" aria-hidden="true"></div>
         <!-- 中央帯HUD：n/12 と「次の数字まで」バー -->
@@ -423,6 +452,30 @@ window.addEventListener('orientationchange', setVH);
 window.audioCtx = null;
 window.audioReady = false;
 
+/* ---- ミュート状態（音声ガイド＋beepを鳴らすか）。localStorageで次回起動も維持。
+        視覚（矢印・ラベル・字幕）はミュートでも常に表示する。 ---- */
+const LS_MUTED = 'shiya_muted';
+window.muted = (localStorage.getItem(LS_MUTED) === 'true');
+function applyMuteUI(){
+  const on = !window.muted;
+  document.querySelectorAll('.muteToggle').forEach(btn=>{
+    btn.setAttribute('aria-pressed', String(window.muted));
+    btn.classList.toggle('off', window.muted);
+    if(btn.id === 'muteToggleGame'){
+      btn.textContent = on ? '🔊' : '🔇';
+    }else{
+      btn.textContent = on ? '🔊 音声オン' : '🔇 音声オフ';
+    }
+  });
+}
+function setMuted(next){
+  window.muted = next;
+  localStorage.setItem(LS_MUTED, String(next));
+  if(next){ try{ stopGuide(); }catch(e){} try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){} } // 再生中の音も止める
+  applyMuteUI();
+}
+function toggleMuted(){ setMuted(!window.muted); }
+
 function unlockAudio(){
   try{
     if(!window.audioCtx){
@@ -448,6 +501,7 @@ function showLockbar(){
 
 /* 合図音（数字の切替）。失敗しても継続。 */
 function beep(freq, dur){
+  if(window.muted) return;
   if(!window.audioReady || !window.audioCtx) return;
   try{
     const o = window.audioCtx.createOscillator();
@@ -476,12 +530,33 @@ function speak(text){
 /* ガイド音声（人間ナレーションmp3）。局面ごとに1本。失敗時はTTSにフォールバック。字幕は別途表示済み。 */
 const GUIDE_SRC = {
   intro: 'audio/guide-intro.mp3',   // やり方解説（約32秒）
-  done:  'audio/guide-done.mp3'     // 完了ナレーション（神経科学のひとこと入り）
+  done:  'audio/guide-done.mp3',    // 完了ナレーション（神経科学のひとこと入り）
+  // 8方向：数字が変わるたびに「スマホを構える方向」を読み上げ
+  dir_up:    'audio/dir-1-up.mp3',
+  dir_ur:    'audio/dir-2-ur.mp3',
+  dir_right: 'audio/dir-3-right.mp3',
+  dir_dr:    'audio/dir-4-dr.mp3',
+  dir_down:  'audio/dir-5-down.mp3',
+  dir_dl:    'audio/dir-6-dl.mp3',
+  dir_left:  'audio/dir-7-left.mp3',
+  dir_ul:    'audio/dir-8-ul.mp3'
 };
+/* 方向配列（時計回り）：ラウンドごとに巡回。音声キー・画面ラベル・矢印。 */
+const DIRS = [
+  {key:'dir_up',    label:'上',   arrow:'↑'},
+  {key:'dir_ur',    label:'右上', arrow:'↗'},
+  {key:'dir_right', label:'右',   arrow:'→'},
+  {key:'dir_dr',    label:'右下', arrow:'↘'},
+  {key:'dir_down',  label:'下',   arrow:'↓'},
+  {key:'dir_dl',    label:'左下', arrow:'↙'},
+  {key:'dir_left',  label:'左',   arrow:'←'},
+  {key:'dir_ul',    label:'左上', arrow:'↖'}
+];
 /* ★iOS対策：Audio要素は使い回す（毎回 new Audio すると、最初のタップ以外＝タイマー発火の
    再生がiOSにブロックされ、以降のガイドが無音orTTSに落ちる）。1要素をタップ内の初回playで
    unlockし、以降 src を差し替えて再生する（呼吸アプリと同方式）。 */
 function playGuide(key, fallbackText){
+  if(window.muted) return;
   try{
     const src = GUIDE_SRC[key];
     if(!src){ if(fallbackText) speak(fallbackText); return; }
@@ -524,6 +599,13 @@ $('tapStart').addEventListener('click', () => {
   showScreen('s1');
   playGuide('intro', '正面の動かない目印を見つめたまま、スマホを視界のはしに構えてね。十秒ごとに変わる数字を、横目で読んでみよう。読めなかったら、スマホを少しずつ中心に近づけて、読める場所を探してね。');
 });
+
+/* ミュートトグル（スプラッシュ／ゲーム共通）。タップで即オン/オフ。 */
+['muteToggleSplash','muteToggleGame'].forEach(id=>{
+  const el = $(id);
+  if(el) el.addEventListener('click', (e)=>{ e.stopPropagation(); toggleMuted(); });
+});
+applyMuteUI();  // 起動時：localStorageの状態をボタンに反映
 
 /* S1 → S2（レベル選択）。S1を離れるのでガイドを止める */
 $('toS2').addEventListener('click', () => {
@@ -597,6 +679,19 @@ document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && window.gTimer){ acquireWakeLock(); }
 });
 
+/* 構える方向を画面に表示（矢印＋ラベル）。ミュートでも必ず出す（視覚は消さない）。 */
+function showDirection(d){
+  if(!d) return;
+  const a = $('dirArrow'), l = $('dirLabel');
+  if(a) a.textContent = d.arrow;
+  if(l) l.textContent = d.label;
+}
+function clearDirection(){
+  const a = $('dirArrow'), l = $('dirLabel');
+  if(a) a.textContent = '';
+  if(l) l.textContent = '';
+}
+
 /* ゲーム開始（level: 1=特大 / 2=中 / 3=小） */
 function startGame(level){
   window.gLevel = level;
@@ -605,6 +700,7 @@ function startGame(level){
   document.body.classList.add('playing');
   showScreen('s3');
   $('bigNum').textContent = '';
+  clearDirection();
   $('hudCount').textContent = '1 / ' + ROUNDS;
   $('hudBarFill').style.width = '0%';
   window.gStart = Date.now();
@@ -625,6 +721,7 @@ function tickGame(){
   const inNum = elapsed - idx * NUM_MS;   // この数字内の経過ms
 
   // 数字が変わった瞬間：新しい数字（直前と違う）＋合図音（★答えは読み上げない）
+  //  ＋「スマホを構える方向」を音声＋画面（矢印・ラベル）で指示（時計回りに巡回）
   if(idx !== window.gIdx){
     window.gIdx = idx;
     let n;
@@ -632,7 +729,10 @@ function tickGame(){
     window.gPrevNum = n;
     $('bigNum').textContent = n;
     $('hudCount').textContent = (idx + 1) + ' / ' + ROUNDS;
-    beep(700, 0.12);
+    beep(700, 0.12);                         // 数字が変わった合図（ミュートで無音）
+    const d = DIRS[idx % 8];                 // 時計回りに巡回
+    showDirection(d);                        // 画面表示（ミュートでも出す）
+    playGuide(d.key);                        // 方向の読み上げ（ミュートで無音）
   }
 
   // 「次の数字まで」バー（薄く）
@@ -663,6 +763,7 @@ function cancelGame(){
   document.body.classList.remove('playing','lv1','lv2','lv3');
   releaseWakeLock(); stopSpeak();
   $('bigNum').textContent = '';
+  clearDirection();
 }
 
 /* もう一度 → レベル選択へ */
